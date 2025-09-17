@@ -1,0 +1,73 @@
+{
+  "name": "@firefun-games/node-auth",
+  "version": "0.1.0-alpha.1",
+  "description": "A secure, production-ready Node.js authentication package with JWT, 2FA, passkeys, and more",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "prisma",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "nodejs",
+    "authentication",
+    "jwt",
+    "2fa",
+    "totp",
+    "passkeys",
+    "webauthn",
+    "prisma",
+    "typescript",
+    "express",
+    "security",
+    "rate-limiting",
+    "bcrypt",
+    "encryption"
+  ],
+  "author": "FireFun Games <info@firefungames.com>",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/firefun-games/node-auth-package.git"
+  },
+  "bugs": {
+    "url": "https://github.com/firefun-games/node-auth-package/issues"
+  },
+  "homepage": "https://github.com/firefun-games/node-auth-package#readme",
+  "peerDependencies": {
+    "@prisma/client": "^6.13.0",
+    "express": "^5.0.0"
+  },
+  "dependencies": {
+    "@simplewebauthn/server": "^13.1.2",
+    "@simplewebauthn/types": "^12.0.0",
+    "bcrypt": "^6.0.0",
+    "express-rate-limit": "^8.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^4.2.1",
+    "qrcode": "^1.5.4",
+    "speakeasy": "^2.0.0",
+    "zod": "^4.0.14"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.1.0",
+    "@types/node-cron": "^3.0.11",
+    "@types/qrcode": "^1.5.5",
+    "@types/speakeasy": "^2.0.10",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
