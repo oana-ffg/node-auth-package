@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { FirefunAuth, FirefunAuthConfig } from './index';
+import { ErrorHandler, AppError } from './utils/errorHandler';
 
 /**
  * Creates a serverless-optimized function handler
@@ -8,9 +9,13 @@ import { FirefunAuth, FirefunAuthConfig } from './index';
  */
 function createServerlessAuthFunction(handlerName: keyof FirefunAuth['authController']) {
   return async (req: Request, res: Response, config: FirefunAuthConfig) => {
-    const auth = new FirefunAuth({ ...config, serverless: true });
-    const handler = (auth.authController as any)[handlerName].bind(auth.authController);
-    return await handler(req, res);
+    try {
+      const auth = new FirefunAuth({ ...config, serverless: true });
+      const handler = (auth.authController as any)[handlerName].bind(auth.authController);
+      return await handler(req, res);
+    } catch (error) {
+      return ErrorHandler.handleError(error, res, `serverless auth function - ${handlerName}`);
+    }
   };
 }
 
@@ -21,9 +26,13 @@ function createServerlessAuthFunction(handlerName: keyof FirefunAuth['authContro
  */
 function createServerlessPasskeyFunction(handlerName: keyof FirefunAuth['passkeyController']) {
   return async (req: Request, res: Response, config: FirefunAuthConfig) => {
-    const auth = new FirefunAuth({ ...config, serverless: true });
-    const handler = (auth.passkeyController as any)[handlerName].bind(auth.passkeyController);
-    return await handler(req, res);
+    try {
+      const auth = new FirefunAuth({ ...config, serverless: true });
+      const handler = (auth.passkeyController as any)[handlerName].bind(auth.passkeyController);
+      return await handler(req, res);
+    } catch (error) {
+      return ErrorHandler.handleError(error, res, `serverless passkey function - ${handlerName}`);
+    }
   };
 }
 
@@ -126,8 +135,7 @@ export function createServerlessHandler(
 
       return await handler(req, res);
     } catch (error) {
-      console.error(`Serverless handler error for ${handlerName}:`, error);
-      return res.status(500).json({ error: 'Internal server error' });
+      return ErrorHandler.handleError(error, res, `serverless handler - ${handlerName}`);
     }
   };
 }

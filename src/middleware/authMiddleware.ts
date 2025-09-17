@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { ErrorHandler, AppError } from '../utils/errorHandler';
 
 // Extend Request to include the decoded user
 export interface AuthenticatedRequest extends Request {
@@ -30,7 +31,14 @@ export class AuthMiddleware {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ error: 'No token provided' });
+      ErrorHandler.handleError(
+        new AppError('No authentication token provided', 401, true, {
+          reason: 'Missing or malformed Authorization header',
+          help: 'Include Authorization header with Bearer token format: "Bearer <token>"'
+        }),
+        res,
+        'auth middleware - missing token'
+      );
       return;
     }
 
@@ -41,7 +49,7 @@ export class AuthMiddleware {
       req.userId = decoded.userId;
       next();
     } catch (err) {
-      res.status(401).json({ error: 'Invalid or expired token' });
+      ErrorHandler.handleError(err, res, 'auth middleware - token verification');
     }
   };
 }

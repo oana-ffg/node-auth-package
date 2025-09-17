@@ -375,6 +375,22 @@ npm install
 npm run build
 ```
 
+## 📋 Changelog
+
+### v0.1.0-alpha.4 - Enhanced Error Handling
+- ✅ **Centralized Error Handler**: New intelligent error categorization system
+- ✅ **Improved Error Messages**: Specific, actionable error responses instead of generic "Internal server error"
+- ✅ **Database Error Handling**: User-friendly messages for Prisma errors (connection issues, duplicates, etc.)
+- ✅ **JWT Error Improvements**: Clear messages for expired/invalid tokens with guidance
+- ✅ **JSON Parsing Errors**: Detailed error context for malformed requests
+- ✅ **Security Focused**: No sensitive internal details exposed in error responses
+- ✅ **Consistent Format**: Standardized error response structure across all endpoints
+
+### v0.1.0-alpha.3 - Previous Release
+- Authentication system with JWT, 2FA, and passkeys
+- Serverless optimization
+- Rate limiting and cleanup jobs
+
 ## 📄 License
 
 ISC License. See [LICENSE](LICENSE) file for details.

@@ -60,6 +60,7 @@ import {
 } from '../schemas/authSchemas';
 
 import { AuthConfig } from '../types';
+import { ErrorHandler, AppError } from '../utils/errorHandler';
 
 export interface PasskeyControllerConfig extends AuthConfig {
   prisma: PrismaClient;
@@ -151,8 +152,7 @@ export class PasskeyController {
 
       return res.json(registrationOptions);
     } catch (err) {
-      console.error('Passkey registration start error:', err);
-      return res.status(500).json({ error: 'Internal server error' });
+      return ErrorHandler.handleError(err, res, 'passkey registration start');
     }
   };
 
@@ -182,9 +182,17 @@ export class PasskeyController {
       // Parse client data to get challenge
       let clientDataJSON: any;
       try {
-        clientDataJSON = JSON.parse(Buffer.from(credential.response.clientDataJSON, 'base64url').toString());
+        const clientDataString = Buffer.from(credential.response.clientDataJSON, 'base64url').toString();
+        clientDataJSON = JSON.parse(clientDataString);
       } catch (e) {
-        return res.status(400).json({ error: 'Invalid client data' });
+        return ErrorHandler.handleError(
+          new AppError('Invalid client data format', 400, true, {
+            reason: 'Failed to parse client data JSON from base64url encoding',
+            help: 'Ensure the clientDataJSON field contains valid base64url-encoded JSON'
+          }),
+          res,
+          'passkey registration - client data parsing'
+        );
       }
 
       const expectedChallenge = clientDataJSON.challenge;
@@ -276,8 +284,7 @@ export class PasskeyController {
         },
       });
     } catch (err) {
-      console.error('Passkey registration complete error:', err);
-      return res.status(500).json({ error: 'Internal server error' });
+      return ErrorHandler.handleError(err, res, 'passkey registration complete');
     }
   };
 
@@ -333,8 +340,7 @@ export class PasskeyController {
 
       return res.json(authenticationOptions);
     } catch (err) {
-      console.error('Passkey authentication start error:', err);
-      return res.status(500).json({ error: 'Internal server error' });
+      return ErrorHandler.handleError(err, res, 'passkey authentication start');
     }
   };
 
@@ -354,9 +360,17 @@ export class PasskeyController {
       // Parse client data to get challenge
       let clientDataJSON: any;
       try {
-        clientDataJSON = JSON.parse(Buffer.from(credential.response.clientDataJSON, 'base64url').toString());
+        const clientDataString = Buffer.from(credential.response.clientDataJSON, 'base64url').toString();
+        clientDataJSON = JSON.parse(clientDataString);
       } catch (e) {
-        return res.status(400).json({ error: 'Invalid client data' });
+        return ErrorHandler.handleError(
+          new AppError('Invalid authentication client data', 400, true, {
+            reason: 'Failed to parse client data JSON from base64url encoding',
+            help: 'Ensure the clientDataJSON field contains valid base64url-encoded JSON'
+          }),
+          res,
+          'passkey authentication - client data parsing'
+        );
       }
 
       const expectedChallenge = clientDataJSON.challenge;
@@ -456,8 +470,7 @@ export class PasskeyController {
         },
       });
     } catch (err) {
-      console.error('Passkey authentication complete error:', err);
-      return res.status(500).json({ error: 'Internal server error' });
+      return ErrorHandler.handleError(err, res, 'passkey authentication complete');
     }
   };
 
@@ -488,8 +501,7 @@ export class PasskeyController {
 
       return res.json({ passkeys });
     } catch (err) {
-      console.error('List passkeys error:', err);
-      return res.status(500).json({ error: 'Internal server error' });
+      return ErrorHandler.handleError(err, res, 'list passkeys');
     }
   };
 
@@ -538,8 +550,7 @@ export class PasskeyController {
 
       return res.json({ message: 'Passkey deleted successfully' });
     } catch (err) {
-      console.error('Delete passkey error:', err);
-      return res.status(500).json({ error: 'Internal server error' });
+      return ErrorHandler.handleError(err, res, 'delete passkey');
     }
   };
 
@@ -590,8 +601,7 @@ export class PasskeyController {
         passkey: updatedPasskey,
       });
     } catch (err) {
-      console.error('Rename passkey error:', err);
-      return res.status(500).json({ error: 'Internal server error' });
+      return ErrorHandler.handleError(err, res, 'rename passkey');
     }
   };
 

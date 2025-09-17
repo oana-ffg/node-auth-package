@@ -45,6 +45,7 @@ import {
   deserializeEncryptedData
 } from '../utils/encryption';
 import { AuthConfig } from '../types';
+import { ErrorHandler, AppError } from '../utils/errorHandler';
 
 export interface AuthControllerConfig extends AuthConfig {
   prisma: PrismaClient;
@@ -99,9 +100,7 @@ export class AuthController {
         },
       });
     } catch (err) {
-      // Log any errors and respond with internal server error
-      console.error(err);
-      return res.status(500).json({ error: 'Internal server error.' });
+      return ErrorHandler.handleError(err, res, 'user registration');
     }
   };
 
@@ -159,9 +158,7 @@ export class AuthController {
       // If 2FA is not enabled, proceed with normal login
       return await this.completeLogin(user, res);
     } catch (err) {
-      // Log any errors and respond with internal server error
-      console.error(err);
-      return res.status(500).json({ error: 'Internal server error.' });
+      return ErrorHandler.handleError(err, res, 'user login');
     }
   };
 
@@ -182,7 +179,14 @@ export class AuthController {
       try {
         decoded = jwt.verify(tempToken, this.config.jwt.secret) as any;
       } catch (err) {
-        return res.status(401).json({ error: 'Invalid or expired temporary token.' });
+        return ErrorHandler.handleError(
+          new AppError('Invalid or expired temporary token', 401, true, {
+            reason: 'JWT verification failed for 2FA temporary token',
+            help: 'Obtain a new temporary token by logging in again'
+          }),
+          res,
+          '2FA token verification'
+        );
       }
 
       // Check if this is a valid temporary token for 2FA verification
@@ -207,8 +211,14 @@ export class AuthController {
         const encryptedData = deserializeEncryptedData(user.twoFactorSecret);
         decryptedSecret = decrypt2FASecret(encryptedData, user.encryptionVersion);
       } catch (error) {
-        console.error('Failed to decrypt 2FA secret during login:', error);
-        return res.status(500).json({ error: 'Authentication system error.' });
+        return ErrorHandler.handleError(
+          new AppError('Authentication system error', 500, true, {
+            reason: 'Failed to decrypt 2FA secret',
+            help: 'Contact support if this error persists'
+          }),
+          res,
+          '2FA secret decryption'
+        );
       }
 
       // Verify the OTP code
@@ -227,8 +237,7 @@ export class AuthController {
       // Complete the login process
       return await this.completeLogin(user, res);
     } catch (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Internal server error.' });
+      return ErrorHandler.handleError(err, res, '2FA login completion');
     }
   };
 
@@ -324,8 +333,7 @@ export class AuthController {
         refreshToken: newRefreshToken,
       });
     } catch (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Internal server error.' });
+      return ErrorHandler.handleError(err, res, 'token refresh');
     }
   };
 
@@ -389,8 +397,14 @@ export class AuthController {
           message: '2FA is already enabled. This is your existing setup.'
         });
       } catch (error) {
-        console.error('Failed to decrypt existing 2FA secret:', error);
-        return res.status(500).json({ error: 'Failed to retrieve existing 2FA setup.' });
+        return ErrorHandler.handleError(
+          new AppError('Failed to retrieve existing 2FA setup', 500, true, {
+            reason: 'Could not decrypt stored 2FA secret',
+            help: 'Try resetting your 2FA setup'
+          }),
+          res,
+          '2FA secret retrieval'
+        );
       }
     }
 
@@ -420,8 +434,14 @@ export class AuthController {
 
       return res.json({ otpauthUrl, qrCodeDataURL: qr });
     } catch (error) {
-      console.error('Failed to encrypt 2FA secret:', error);
-      return res.status(500).json({ error: 'Failed to generate 2FA secret.' });
+      return ErrorHandler.handleError(
+        new AppError('Failed to generate 2FA secret', 500, true, {
+          reason: 'Encryption of 2FA secret failed',
+          help: 'Please try again or contact support'
+        }),
+        res,
+        '2FA secret generation'
+      );
     }
   };
 
@@ -458,8 +478,14 @@ export class AuthController {
         const encryptedData = deserializeEncryptedData(user.twoFactorSecret);
         decryptedSecret = decrypt2FASecret(encryptedData, user.encryptionVersion);
       } catch (error) {
-        console.error('Failed to decrypt 2FA secret during confirmation:', error);
-        return res.status(500).json({ error: 'Authentication system error.' });
+        return ErrorHandler.handleError(
+          new AppError('Authentication system error', 500, true, {
+            reason: 'Failed to decrypt 2FA secret during confirmation',
+            help: 'Try regenerating your 2FA setup'
+          }),
+          res,
+          '2FA confirmation - secret decryption'
+        );
       }
 
       // Verify the OTP code using speakeasy
@@ -486,8 +512,7 @@ export class AuthController {
         twoFactorEnabled: true,
       });
     } catch (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Internal server error.' });
+      return ErrorHandler.handleError(err, res, '2FA confirmation');
     }
   };
 
@@ -552,12 +577,17 @@ export class AuthController {
           qrCodeDataURL: qr,
         });
       } catch (error) {
-        console.error('Failed to encrypt new 2FA secret during reset:', error);
-        return res.status(500).json({ error: 'Failed to reset 2FA secret.' });
+        return ErrorHandler.handleError(
+          new AppError('Failed to reset 2FA secret', 500, true, {
+            reason: 'Encryption of new 2FA secret failed',
+            help: 'Please try again or contact support'
+          }),
+          res,
+          '2FA reset - secret encryption'
+        );
       }
     } catch (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Internal server error.' });
+      return ErrorHandler.handleError(err, res, '2FA reset');
     }
   };
 
@@ -610,8 +640,7 @@ export class AuthController {
         twoFactorEnabled: false,
       });
     } catch (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Internal server error.' });
+      return ErrorHandler.handleError(err, res, '2FA disable');
     }
   };
 
@@ -665,8 +694,7 @@ export class AuthController {
         message: 'Account deleted successfully. All data has been permanently removed.',
       });
     } catch (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Internal server error.' });
+      return ErrorHandler.handleError(err, res, 'account deletion');
     }
   };
 
