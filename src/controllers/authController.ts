@@ -4,8 +4,28 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import speakeasy from 'speakeasy';
-import qrcode from 'qrcode';
+
+// Lazy imports for serverless optimization
+let speakeasy: any = null;
+let qrcode: any = null;
+
+async function getSpeakeasy() {
+  if (!speakeasy) {
+    speakeasy = await import('speakeasy');
+  }
+  return speakeasy;
+}
+
+async function getQRCode() {
+  if (!qrcode) {
+    qrcode = await import('qrcode');
+  }
+  return qrcode;
+}
+
+// Fallback synchronous imports for backwards compatibility
+import speakeasySync from 'speakeasy';
+import qrcodeSync from 'qrcode';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import {
   registerSchema,
@@ -192,7 +212,8 @@ export class AuthController {
       }
 
       // Verify the OTP code
-      const verified = speakeasy.totp.verify({
+      const speakeasyLib = speakeasy || speakeasySync;
+      const verified = speakeasyLib.totp.verify({
         secret: decryptedSecret,
         encoding: 'base32',
         token: otp,
@@ -345,9 +366,12 @@ export class AuthController {
         const encryptedData = deserializeEncryptedData(user.twoFactorSecret);
         const decryptedSecret = decrypt2FASecret(encryptedData, user.encryptionVersion, this.config.encryption);
 
+        const speakeasyLib = speakeasy || speakeasySync;
+        const qrcodeLib = qrcode || qrcodeSync;
+
         const secret = {
           base32: decryptedSecret,
-          otpauth_url: speakeasy.otpauthURL({
+          otpauth_url: speakeasyLib.otpauthURL({
             secret: decryptedSecret,
             label: user.email,
             issuer: this.config.appName,
@@ -357,7 +381,7 @@ export class AuthController {
           })
         };
 
-        const qr = await qrcode.toDataURL(secret.otpauth_url);
+        const qr = await qrcodeLib.toDataURL(secret.otpauth_url);
 
         return res.json({
           otpauthUrl: secret.otpauth_url,
@@ -371,7 +395,10 @@ export class AuthController {
     }
 
     // Generate new secret only if 2FA is not enabled
-    const secret = speakeasy.generateSecret({
+    const speakeasyLib = speakeasy || speakeasySync;
+    const qrcodeLib = qrcode || qrcodeSync;
+
+    const secret = speakeasyLib.generateSecret({
       name: `${this.config.appName} (${user.email})`,
     });
 
@@ -389,7 +416,7 @@ export class AuthController {
       });
 
       const otpauthUrl = secret.otpauth_url!;
-      const qr = await qrcode.toDataURL(otpauthUrl);
+      const qr = await qrcodeLib.toDataURL(otpauthUrl);
 
       return res.json({ otpauthUrl, qrCodeDataURL: qr });
     } catch (error) {
@@ -436,7 +463,8 @@ export class AuthController {
       }
 
       // Verify the OTP code using speakeasy
-      const verified = speakeasy.totp.verify({
+      const speakeasyLib = speakeasy || speakeasySync;
+      const verified = speakeasyLib.totp.verify({
         secret: decryptedSecret,
         encoding: 'base32',
         token: otp,
@@ -493,7 +521,10 @@ export class AuthController {
       }
 
       // Generate new secret
-      const secret = speakeasy.generateSecret({
+      const speakeasyLib = speakeasy || speakeasySync;
+      const qrcodeLib = qrcode || qrcodeSync;
+
+      const secret = speakeasyLib.generateSecret({
         name: `${this.config.appName} (${user.email})`,
       });
 
@@ -513,7 +544,7 @@ export class AuthController {
         });
 
         const otpauthUrl = secret.otpauth_url!;
-        const qr = await qrcode.toDataURL(otpauthUrl);
+        const qr = await qrcodeLib.toDataURL(otpauthUrl);
 
         return res.status(200).json({
           message: '2FA reset successfully. Please scan the new QR code and confirm setup.',

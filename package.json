@@ -1,11 +1,27 @@
 {
-  "name": "@firefun-games/node-auth",
-  "version": "0.1.0-alpha.1",
+  "name": "firefun-node-auth",
+  "version": "0.1.0-alpha.3",
   "description": "A secure, production-ready Node.js authentication package with JWT, 2FA, passkeys, and more",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.js"
+    },
+    "./serverless": {
+      "types": "./dist/serverless.d.ts",
+      "require": "./dist/serverless.js",
+      "import": "./dist/serverless.js"
+    }
+  },
+  "bin": {
+    "firefun-auth-setup": "./scripts/setup.js"
+  },
   "files": [
     "dist",
+    "scripts",
     "prisma",
     "README.md",
     "LICENSE"
@@ -14,6 +30,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "echo \"Error: no test specified\" && exit 1",
+    "setup": "node scripts/setup.js",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

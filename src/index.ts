@@ -79,23 +79,28 @@ export interface FirefunAuthConfig {
 
   // Prisma client
   prisma: PrismaClient;
+
+  // Serverless mode configuration
+  serverless?: boolean;
 }
 
 export class FirefunAuth {
   private config: AuthConfig;
   private prisma: PrismaClient;
+  private serverless: boolean;
 
-  // Core components
-  private authController: AuthController;
-  private passkeyController: PasskeyController;
-  private authMiddleware: AuthMiddleware;
-  private rateLimitMiddleware: RateLimitMiddleware;
-  private cleanupService: CleanupService;
-  private jobScheduler?: JobScheduler;
-  private schemas: AuthSchemas;
+  // Core components - lazy initialized
+  private _authController?: AuthController;
+  private _passkeyController?: PasskeyController;
+  private _authMiddleware?: AuthMiddleware;
+  private _rateLimitMiddleware?: RateLimitMiddleware;
+  private _cleanupService?: CleanupService;
+  private _jobScheduler?: JobScheduler;
+  private _schemas?: AuthSchemas;
 
   constructor(config: FirefunAuthConfig) {
     this.prisma = config.prisma;
+    this.serverless = config.serverless || false;
 
     // Set defaults and create full config
     this.config = {
@@ -110,6 +115,7 @@ export class FirefunAuth {
         pbkdf2Iterations: config.encryption.pbkdf2Iterations || 100000,
         keys: config.encryption.keys,
         currentVersion: config.encryption.currentVersion,
+        serverless: this.serverless,
       },
       webauthn: {
         rpName: config.webauthn.rpName,
@@ -120,40 +126,80 @@ export class FirefunAuth {
       },
     };
 
-    // Initialize encryption with config
-    initializeEncryption(this.config.encryption);
-
-    // Initialize components
-    this.authController = new AuthController({
-      ...this.config,
-      prisma: this.prisma,
-    });
-
-    this.passkeyController = new PasskeyController({
-      ...this.config,
-      prisma: this.prisma,
-    });
-
-    this.authMiddleware = new AuthMiddleware({
-      jwtSecret: this.config.jwt.secret,
-    });
-
-    this.rateLimitMiddleware = new RateLimitMiddleware(config.rateLimiting);
-
-    this.cleanupService = new CleanupService(this.prisma);
-
-    if (config.scheduler) {
-      this.jobScheduler = new JobScheduler(this.cleanupService, config.scheduler);
+    // Only initialize encryption in non-serverless mode or when needed
+    if (!this.serverless) {
+      initializeEncryption(this.config.encryption);
     }
 
-    const validationConfig = config.validation || {
-      passwordMinLength: 8,
-      requireUppercase: true,
-      requireNumber: true,
-      requireSpecialChar: true,
-    };
+    // Initialize light components immediately
+    this._rateLimitMiddleware = new RateLimitMiddleware(config.rateLimiting);
 
-    this.schemas = new AuthSchemas(validationConfig);
+    // Initialize scheduler only in non-serverless mode
+    if (!this.serverless && config.scheduler) {
+      this._jobScheduler = new JobScheduler(this.cleanupService, config.scheduler);
+    }
+  }
+
+  // Lazy getters for heavy components
+  get authController(): AuthController {
+    if (!this._authController) {
+      // Initialize encryption if not already done (serverless mode)
+      if (this.serverless) {
+        initializeEncryption(this.config.encryption);
+      }
+      this._authController = new AuthController({
+        ...this.config,
+        prisma: this.prisma,
+      });
+    }
+    return this._authController;
+  }
+
+  get passkeyController(): PasskeyController {
+    if (!this._passkeyController) {
+      this._passkeyController = new PasskeyController({
+        ...this.config,
+        prisma: this.prisma,
+      });
+    }
+    return this._passkeyController;
+  }
+
+  get authMiddleware(): AuthMiddleware {
+    if (!this._authMiddleware) {
+      this._authMiddleware = new AuthMiddleware({
+        jwtSecret: this.config.jwt.secret,
+      });
+    }
+    return this._authMiddleware;
+  }
+
+  get rateLimitMiddleware(): RateLimitMiddleware {
+    return this._rateLimitMiddleware!;
+  }
+
+  get cleanupService(): CleanupService {
+    if (!this._cleanupService) {
+      this._cleanupService = new CleanupService(this.prisma, this.serverless);
+    }
+    return this._cleanupService;
+  }
+
+  get jobScheduler(): JobScheduler | undefined {
+    return this._jobScheduler;
+  }
+
+  get schemas(): AuthSchemas {
+    if (!this._schemas) {
+      const validationConfig = {
+        passwordMinLength: 8,
+        requireUppercase: true,
+        requireNumber: true,
+        requireSpecialChar: true,
+      };
+      this._schemas = new AuthSchemas(validationConfig);
+    }
+    return this._schemas;
   }
 
   /**
@@ -230,6 +276,11 @@ export class FirefunAuth {
    * Start scheduled cleanup jobs
    */
   public startScheduler(): void {
+    if (this.serverless) {
+      console.warn('⚠️ Scheduler disabled in serverless mode for optimal cold start performance.');
+      return;
+    }
+
     if (this.jobScheduler) {
       this.jobScheduler.startScheduledJobs();
     } else {

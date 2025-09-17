@@ -13,6 +13,25 @@ import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
+// Dynamic imports for serverless optimization
+let webauthnServer: any = null;
+let webauthnTypes: any = null;
+
+async function getWebAuthnServer() {
+  if (!webauthnServer) {
+    webauthnServer = await import('@simplewebauthn/server');
+  }
+  return webauthnServer;
+}
+
+async function getWebAuthnTypes() {
+  if (!webauthnTypes) {
+    webauthnTypes = await import('@simplewebauthn/types');
+  }
+  return webauthnTypes;
+}
+
+// Fallback synchronous imports for backwards compatibility
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,

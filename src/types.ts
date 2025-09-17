@@ -19,6 +19,7 @@ export interface AuthConfig {
       v2?: string;
     };
     currentVersion: string;
+    serverless?: boolean;
   };
   webauthn: {
     rpName: string;

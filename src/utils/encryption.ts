@@ -18,6 +18,7 @@ export interface EncryptionConfig {
     v2?: string;
   };
   currentVersion: string;
+  serverless?: boolean;
 }
 
 export class EncryptionUtil {
@@ -25,7 +26,10 @@ export class EncryptionUtil {
 
   constructor(config: EncryptionConfig) {
     this.config = config;
-    this.validateConfig();
+    // Skip expensive validation in serverless mode for faster cold starts
+    if (!config.serverless) {
+      this.validateConfig();
+    }
   }
 
   private validateConfig(): void {
@@ -48,21 +52,6 @@ export class EncryptionUtil {
    */
   private deriveKey(keyString: string, salt: Buffer): Buffer {
     return crypto.pbkdf2Sync(keyString, salt, this.config.pbkdf2Iterations, this.config.keyLength, 'sha256');
-  }
-
-  /**
-   * Async version of key derivation for better performance in high-concurrency scenarios
-   * @param keyString - The key string from environment variables
-   * @param salt - Unique salt for key derivation (must be provided for security)
-   * @returns Promise resolving to 32-byte key for AES-256
-   */
-  private async deriveKeyAsync(keyString: string, salt: Buffer): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-      crypto.pbkdf2(keyString, salt, this.config.pbkdf2Iterations, this.config.keyLength, 'sha256', (err, derivedKey) => {
-        if (err) reject(err);
-        else resolve(derivedKey);
-      });
-    });
   }
 
   /**

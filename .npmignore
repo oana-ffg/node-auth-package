@@ -1,0 +1,47 @@
+# Source files - only include built dist/
+src/
+tsconfig.json
+
+# Development files
+.github/
+.git/
+.gitignore
+
+# Node modules and locks
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Environment and config files
+.env*
+.vscode/
+.idea/
+
+# Test files and coverage
+**/*.test.ts
+**/*.test.js
+**/*.spec.ts
+**/*.spec.js
+test/
+tests/
+__tests__/
+coverage/
+*.lcov
+
+# Build artifacts (keep only dist/)
+build/
+
+# Logs and temp files
+*.log
+*.pid
+*.seed
+*.pid.lock
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Development database
+prisma/dev.db
+prisma/migrations/

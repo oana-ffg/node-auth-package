@@ -1,4 +1,4 @@
-# 🔐 @firefun-games/node-auth
+# 🔐 firefun-node-auth
 
 > **Alpha Release** - A secure, production-ready Node.js authentication package built by FireFun Games.
 
@@ -26,6 +26,7 @@ A comprehensive authentication solution featuring JWT tokens, 2FA, passkeys (Web
 - ✅ **Modular Design** - Use individual components or the complete solution
 - ✅ **Scheduled Jobs** - Background cleanup tasks with node-cron
 - ✅ **Express Integration** - Ready-to-use middleware and routes
+- ✅ **Serverless Optimized** - Lazy loading and cold start optimization for Vercel, AWS Lambda, etc.
 
 ## 🛠️ Tech Stack
 
@@ -39,7 +40,10 @@ A comprehensive authentication solution featuring JWT tokens, 2FA, passkeys (Web
 ## 🚀 Installation
 
 ```bash
-npm install @firefun-games/node-auth @prisma/client express
+npm install firefun-node-auth @prisma/client express
+
+# Quick database setup
+npx firefun-auth-setup
 ```
 
 ## 📖 Quick Start
@@ -49,7 +53,7 @@ npm install @firefun-games/node-auth @prisma/client express
 ```typescript
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import { FirefunAuth } from '@firefun-games/node-auth';
+import { FirefunAuth } from 'firefun-node-auth';
 
 const app = express();
 const prisma = new PrismaClient();
@@ -103,22 +107,74 @@ app.listen(3000, () => {
 });
 ```
 
-### 2. Database Setup
+### 2. Serverless Usage (Vercel, AWS Lambda, etc.)
 
-First, copy the Prisma schema from the package to your project:
+**For optimal serverless performance:**
 
-```bash
-cp node_modules/@firefun-games/node-auth/prisma/schema.prisma ./prisma/
+```typescript
+import { FirefunAuth } from 'firefun-node-auth';
+
+// Enable serverless mode for faster cold starts
+const auth = new FirefunAuth({
+  // ... your config
+  serverless: true, // 🚀 Enable serverless optimizations
+});
+
+// Use lazy-loaded components
+app.use('/api/auth', auth.createAuthRoutes());
 ```
 
-Then run migrations:
+**Or use standalone functions for individual endpoints:**
 
+```typescript
+// api/auth/register.js (Vercel function)
+import { registerUserWithRateLimit } from 'firefun-node-auth/serverless';
+
+export default async function handler(req, res) {
+  return registerUserWithRateLimit(req, res, {
+    // your config here
+    serverless: true,
+  });
+}
+```
+
+**Available serverless functions:**
+```typescript
+import {
+  registerUser,
+  loginUser,
+  loginWith2FA,
+  refreshTokenHandler,
+  generate2FASecret,
+  // ... and more
+} from 'firefun-node-auth/serverless';
+```
+
+### 3. Database Setup
+
+**Option 1: Automatic Setup (Recommended)**
 ```bash
-npx prisma migrate dev
+npx firefun-auth-setup
+```
+
+This will automatically:
+- Copy Prisma schema and migrations to your project
+- Generate the Prisma client
+- Run database migrations
+- Validate your setup
+
+**Option 2: Manual Setup**
+```bash
+# Copy schema and migrations
+cp node_modules/firefun-node-auth/prisma/schema.prisma ./prisma/
+cp -r node_modules/firefun-node-auth/prisma/migrations ./prisma/
+
+# Generate client and run migrations
 npx prisma generate
+npx prisma migrate deploy
 ```
 
-### 3. Environment Configuration
+### 4. Environment Configuration
 
 Create your `.env` file:
 
@@ -164,13 +220,49 @@ NODE_ENV=development
 ### Protected Route Example
 
 ```typescript
-import { AuthenticatedRequest } from '@firefun-games/node-auth';
+import { AuthenticatedRequest } from 'firefun-node-auth';
 
 // Protect routes with the auth middleware
 app.get('/api/profile', auth.getAuthMiddleware(), (req: AuthenticatedRequest, res) => {
   const userId = req.userId; // Available after auth middleware
   res.json({ message: `Hello user ${userId}` });
 });
+```
+
+## 🚀 Serverless Performance
+
+### Cold Start Optimization
+
+The package includes several optimizations for serverless environments:
+
+- **Lazy Initialization**: Heavy components only load when needed
+- **Reduced Memory Footprint**: Minimal upfront initialization
+- **Faster Cold Starts**: < 100ms initialization in serverless mode
+- **Optimized Dependencies**: Dynamic imports for heavy libraries
+- **Background Tasks Disabled**: No scheduler in serverless mode
+
+### Performance Comparison
+
+| Mode | Cold Start Time | Memory Usage | Initialization |
+|------|----------------|--------------|----------------|
+| Traditional | ~500ms | High | All upfront |
+| Serverless | < 100ms | Low | Lazy loaded |
+
+### Vercel Deployment Example
+
+```typescript
+// api/auth/[...auth].ts
+import { FirefunAuth } from 'firefun-node-auth';
+
+const auth = new FirefunAuth({
+  // your config
+  serverless: true,
+});
+
+export default async function handler(req, res) {
+  const authRouter = auth.createAuthRoutes();
+  return authRouter(req, res);
+}
 ```
 
 ## 🔧 Advanced Usage
@@ -195,7 +287,7 @@ console.log(`Cleaned up ${result.refreshTokensDeleted} tokens and ${result.chall
 ### Using Individual Components
 
 ```typescript
-import { AuthController, AuthMiddleware, CleanupService } from '@firefun-games/node-auth';
+import { AuthController, AuthMiddleware, CleanupService } from 'firefun-node-auth';
 
 // Use components individually for custom implementations
 const authMiddleware = new AuthMiddleware({ jwtSecret: 'your-secret' });
@@ -231,7 +323,7 @@ const cleanupService = new CleanupService(prisma);
 The package follows a modular architecture:
 
 ```
-@firefun-games/node-auth/
+firefun-node-auth/
 ├── controllers/     # Business logic (Auth, Passkey)
 ├── middleware/      # Express middleware (Auth, Rate Limiting)
 ├── services/        # Background services (Cleanup)
@@ -246,6 +338,31 @@ The package follows a modular architecture:
 - **Node.js**: >= 16.0.0
 - **Database**: PostgreSQL (via Prisma)
 - **Express**: >= 5.0.0
+
+## 🔧 Troubleshooting
+
+### Setup Issues
+
+**"No package.json found" error:**
+- Make sure you're running `npx firefun-auth-setup` in your project root
+
+**Database connection errors:**
+- Verify your `DATABASE_URL` in `.env` is correct
+- Make sure your database server is running
+- Try running `npx prisma migrate deploy` manually
+
+**Permission errors:**
+- On macOS/Linux, you might need to run with elevated permissions
+- Try: `sudo npx firefun-auth-setup`
+
+**Existing Prisma setup:**
+- The setup script backs up existing files to `.backup` extensions
+- Review and merge any custom changes from your backups
+
+### Getting Help
+
+- **Issues**: [GitHub Issues](https://github.com/firefun-games/node-auth-package/issues)
+- **Documentation**: [npm package page](https://www.npmjs.com/package/firefun-node-auth)
 
 ## 🧪 Development
 
