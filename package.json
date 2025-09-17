@@ -1,6 +1,6 @@
 {
   "name": "firefun-node-auth",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.10",
   "description": "A secure, production-ready Node.js authentication package with JWT, 2FA, passkeys, and more",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

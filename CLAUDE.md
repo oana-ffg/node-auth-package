@@ -1,0 +1,1 @@
+- This is an npm package currently released as alpha that we will be using internally. Primary usecase is Vercel deployment

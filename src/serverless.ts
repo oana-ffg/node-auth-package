@@ -3,6 +3,57 @@ import { FirefunAuth, FirefunAuthConfig } from './index';
 import { ErrorHandler, AppError } from './utils/errorHandler';
 
 /**
+ * Ensures request body is properly parsed as JSON for Vercel serverless functions
+ * Vercel automatically parses JSON bodies, so this mainly validates the body exists
+ */
+function ensureJSONBody(req: Request): void {
+  // Safely access req.body since it might be a problematic getter in some environments
+  let body: any;
+  try {
+    body = req.body;
+  } catch (error) {
+    body = undefined;
+  }
+
+  // If body is already an object (including parsed JSON), we're good to go
+  // This is the normal case for Vercel which auto-parses JSON
+  if (body && typeof body === 'object') {
+    return;
+  }
+
+  // If body is undefined or null, set empty object for safety
+  if (body === undefined || body === null) {
+    req.body = {};
+    return;
+  }
+
+  // If body is a string, try to parse it as JSON (fallback for other environments)
+  if (typeof body === 'string') {
+    try {
+      if (body.trim() === '') {
+        req.body = {};
+        return;
+      }
+      req.body = JSON.parse(body);
+    } catch (parseError) {
+      throw new AppError('Invalid JSON in request body', 400, true, {
+        reason: 'Request body could not be parsed as JSON',
+        help: 'Ensure you are sending valid JSON with Content-Type: application/json',
+        details: `Body received: ${body.substring(0, 200)}${body.length > 200 ? '...' : ''}`
+      });
+    }
+    return;
+  }
+
+  // For any other primitive type, throw an error
+  throw new AppError('Unexpected request body format', 400, true, {
+    reason: `Request body type '${typeof body}' is not supported`,
+    help: 'Ensure you are sending JSON with Content-Type: application/json',
+    details: `Body type: ${typeof body}, Value: ${String(body).substring(0, 100)}`
+  });
+}
+
+/**
  * Creates a serverless-optimized function handler
  * @param handlerName - The method name on AuthController to call
  * @returns Function that can be used as a serverless endpoint
@@ -10,6 +61,9 @@ import { ErrorHandler, AppError } from './utils/errorHandler';
 function createServerlessAuthFunction(handlerName: keyof FirefunAuth['authController']) {
   return async (req: Request, res: Response, config: FirefunAuthConfig) => {
     try {
+      // Ensure JSON body is parsed for serverless environments
+      ensureJSONBody(req);
+
       const auth = new FirefunAuth({ ...config, serverless: true });
       const handler = (auth.authController as any)[handlerName].bind(auth.authController);
       return await handler(req, res);
@@ -27,6 +81,9 @@ function createServerlessAuthFunction(handlerName: keyof FirefunAuth['authContro
 function createServerlessPasskeyFunction(handlerName: keyof FirefunAuth['passkeyController']) {
   return async (req: Request, res: Response, config: FirefunAuthConfig) => {
     try {
+      // Ensure JSON body is parsed for serverless environments
+      ensureJSONBody(req);
+
       const auth = new FirefunAuth({ ...config, serverless: true });
       const handler = (auth.passkeyController as any)[handlerName].bind(auth.passkeyController);
       return await handler(req, res);
@@ -104,6 +161,9 @@ export function createServerlessHandler(
     const auth = new FirefunAuth({ ...config, serverless: true });
 
     try {
+      // Ensure JSON body is parsed for serverless environments
+      ensureJSONBody(req);
+
       // Apply rate limiting if specified
       if (rateLimitType) {
         const rateLimits = auth.getRateLimitMiddleware();

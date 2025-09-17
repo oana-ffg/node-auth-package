@@ -29,14 +29,14 @@ export class AuthSchemas {
     }
 
     return z.object({
-      email: z.email(),
+      email: z.string().email(),
       password: passwordSchema,
     });
   }
 
   public get loginSchema() {
     return z.object({
-      email: z.email(),
+      email: z.string().email(),
       password: z.string(),
     });
   }
@@ -114,7 +114,7 @@ export class AuthSchemas {
 
   public get passkeyAuthenticationStartSchema() {
     return z.object({
-      email: z.email().optional(),
+      email: z.string().email().optional(),
     });
   }
 
