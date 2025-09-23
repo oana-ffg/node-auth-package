@@ -3,47 +3,31 @@ import { FirefunAuth, FirefunAuthConfig } from './index';
 import { ErrorHandler, AppError } from './utils/errorHandler';
 
 /**
- * Ensures request body is properly parsed as JSON for Vercel serverless functions
- * Vercel automatically parses JSON bodies, so this mainly validates the body exists
+ * Vercel-compatible body handler for serverless environments
+ * Handles different body formats that may be encountered in serverless runtimes
  */
 function ensureJSONBody(req: Request): void {
-  // Minimal debug logging to match optimized endpoint approach
-  console.log('Auth Body type:', typeof req.body, 'Email:', req.body?.email, 'Password exists:', !!req.body?.password);
-
-  // Handle different body formats (same logic as working direct endpoint)
-  if (req.body && typeof req.body === 'object') {
-    // Body is already parsed - this is the normal Vercel case
-    return;
-  }
-
-  if (typeof req.body === 'string') {
-    try {
-      if (req.body.trim() === '') {
-        req.body = {};
-        return;
-      }
-      req.body = JSON.parse(req.body);
-    } catch (parseError) {
-      throw new AppError('Invalid JSON in request body', 400, true, {
-        reason: 'Request body could not be parsed as JSON',
-        help: 'Ensure you are sending valid JSON with Content-Type: application/json',
-        details: `Body received: ${req.body.substring(0, 200)}${req.body.length > 200 ? '...' : ''}`
-      });
+  let parsedBody;
+  try {
+    // Handle different body formats for serverless environments
+    if (req.body && typeof req.body === 'object') {
+      parsedBody = req.body;
+    } else if (typeof req.body === 'string') {
+      parsedBody = JSON.parse(req.body);
+    } else {
+      throw new Error('No body found');
     }
-    return;
-  }
 
-  if (req.body === undefined || req.body === null) {
-    req.body = {};
-    return;
-  }
+    // Success - update req.body to ensure it's the parsed object
+    req.body = parsedBody;
 
-  // For any other type, throw an error
-  throw new AppError('Unexpected request body format', 400, true, {
-    reason: `Request body type '${typeof req.body}' is not supported`,
-    help: 'Ensure you are sending JSON with Content-Type: application/json',
-    details: `Body type: ${typeof req.body}`
-  });
+  } catch (error) {
+    throw new AppError('Invalid JSON body', 400, true, {
+      reason: 'Failed to parse request body',
+      help: 'Ensure Content-Type: application/json header is set and body contains valid JSON',
+      details: `Body type: ${typeof req.body}, Error: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
 }
 
 /**

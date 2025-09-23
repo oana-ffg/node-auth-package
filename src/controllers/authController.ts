@@ -65,15 +65,11 @@ export class AuthController {
    * Route: POST /register
    */
   public registerUser = async (req: Request, res: Response) => {
-    console.log('AuthController req.body:', typeof req.body, 'Email:', req.body?.email, 'Password exists:', !!req.body?.password);
-
     const parse = registerSchema.safeParse(req.body);
     if (!parse.success) {
-      console.log('Zod validation failed:', parse.error);
       return res.status(400).json({ error: z.flattenError(parse.error) });
     }
     const { email, password } = parse.data;
-    console.log('Extracted from Zod:', 'Email:', email, 'Password exists:', !!password);
 
     try {
       // Check if a user with the given email already exists in the database
