@@ -67,9 +67,28 @@ export class AuthController {
   public registerUser = async (req: Request, res: Response) => {
     const parse = registerSchema.safeParse(req.body);
     if (!parse.success) {
+      // Enhanced logging for password validation failures
+      const passwordErrors = parse.error.issues.filter(issue =>
+        issue.path.includes('password')
+      );
+      if (passwordErrors.length > 0) {
+        console.log('Password validation failed:', {
+          errors: passwordErrors.map(e => e.message),
+          passwordLength: req.body?.password?.length || 0,
+          hasExclamation: req.body?.password?.includes('!') || false,
+          specialChars: req.body?.password ? req.body.password.match(/[^A-Za-z0-9]/g) : null
+        });
+      }
       return res.status(400).json({ error: z.flattenError(parse.error) });
     }
     const { email, password } = parse.data;
+
+    // Debug logging for successful password parsing
+    console.log('Password successfully parsed:', {
+      length: password.length,
+      hasExclamation: password.includes('!'),
+      specialChars: password.match(/[^A-Za-z0-9]/g)
+    });
 
     try {
       // Check if a user with the given email already exists in the database
@@ -112,9 +131,28 @@ export class AuthController {
   public loginUser = async (req: Request, res: Response) => {
     const parse = loginSchema.safeParse(req.body);
     if (!parse.success) {
+      // Enhanced logging for login validation failures
+      const passwordErrors = parse.error.issues.filter(issue =>
+        issue.path.includes('password')
+      );
+      if (passwordErrors.length > 0) {
+        console.log('Login password validation failed:', {
+          errors: passwordErrors.map(e => e.message),
+          passwordLength: req.body?.password?.length || 0,
+          hasExclamation: req.body?.password?.includes('!') || false
+        });
+      }
       return res.status(400).json({ error: z.flattenError(parse.error) });
     }
     const { email, password } = parse.data;
+
+    // Debug logging for successful login password parsing
+    console.log('Login password successfully parsed:', {
+      email,
+      passwordLength: password.length,
+      hasExclamation: password.includes('!'),
+      specialChars: password.match(/[^A-Za-z0-9]/g)
+    });
 
     try {
       // Find the user in the database by email

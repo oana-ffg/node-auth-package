@@ -11,9 +11,41 @@ function ensureJSONBody(req: Request): void {
   try {
     // Handle different body formats for serverless environments
     if (req.body && typeof req.body === 'object') {
+      // Body is already parsed - validate it's not corrupted
       parsedBody = req.body;
+
+      // Validate that special characters in password fields are preserved
+      if (parsedBody.password && typeof parsedBody.password === 'string') {
+        const originalLength = parsedBody.password.length;
+        // Check if password looks suspicious (common issues: truncation, encoding problems)
+        if (originalLength === 0) {
+          throw new Error('Password field appears to be empty after parsing');
+        }
+      }
     } else if (typeof req.body === 'string') {
-      parsedBody = JSON.parse(req.body);
+      // Parse string body - this is where special character issues often occur
+      const bodyString = req.body;
+
+      // Validate the string looks like valid JSON
+      if (!bodyString.trim().startsWith('{') && !bodyString.trim().startsWith('[')) {
+        throw new Error('Body string does not appear to be valid JSON');
+      }
+
+      // Parse with detailed error handling
+      try {
+        parsedBody = JSON.parse(bodyString);
+      } catch (parseError) {
+        // Enhanced error for JSON parsing issues - often where special chars get lost
+        throw new Error(`JSON parsing failed. This may be due to special characters in the request. Original error: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+      }
+
+      // Validate that special characters in password fields survived parsing
+      if (parsedBody.password && typeof parsedBody.password === 'string') {
+        const originalPasswordInString = bodyString.match(/"password"\s*:\s*"([^"]*?)"/)?.[1];
+        if (originalPasswordInString && originalPasswordInString !== parsedBody.password) {
+          throw new Error(`Password field was corrupted during JSON parsing. Original contained special characters that may have been lost.`);
+        }
+      }
     } else {
       throw new Error('No body found');
     }
@@ -24,8 +56,8 @@ function ensureJSONBody(req: Request): void {
   } catch (error) {
     throw new AppError('Invalid JSON body', 400, true, {
       reason: 'Failed to parse request body',
-      help: 'Ensure Content-Type: application/json header is set and body contains valid JSON',
-      details: `Body type: ${typeof req.body}, Error: ${error instanceof Error ? error.message : String(error)}`
+      help: 'Ensure Content-Type: application/json header is set and body contains valid JSON. If using special characters in passwords, ensure they are properly escaped.',
+      details: `Body type: ${typeof req.body}, Body preview: ${typeof req.body === 'string' ? req.body.substring(0, 100) + '...' : 'object'}, Error: ${error instanceof Error ? error.message : String(error)}`
     });
   }
 }
