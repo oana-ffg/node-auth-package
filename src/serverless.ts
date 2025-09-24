@@ -226,3 +226,6 @@ export const completePasskeyRegistrationWithAuth = createServerlessHandler('comp
 export const listPasskeysWithAuth = createServerlessHandler('listPasskeys', true);
 export const deletePasskeyWithAuth = createServerlessHandler('deletePasskey', true);
 export const renamePasskeyWithAuth = createServerlessHandler('renamePasskey', true);
+
+// Export utility functions for testing
+export { ensureJSONBody, createServerlessAuthFunction, createServerlessPasskeyFunction };

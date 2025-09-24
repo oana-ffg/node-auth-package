@@ -40,6 +40,10 @@ coverage/
 
 # Test output
 test-results/
+.jest-cache/
+
+# Test reports
+junit.xml
 
 # Prisma
 prisma/dev.db
