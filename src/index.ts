@@ -14,7 +14,7 @@ import { CleanupService } from './services/cleanupService';
 import { JobScheduler } from './jobs/scheduler';
 
 // Utils and Schemas
-import { EncryptionUtil, initializeEncryption } from './utils/encryption';
+import { EncryptionUtil } from './utils/encryption';
 import { AuthSchemas } from './schemas/authSchemas';
 
 // Types
@@ -126,11 +126,6 @@ export class FirefunAuth {
       },
     };
 
-    // Only initialize encryption in non-serverless mode or when needed
-    if (!this.serverless) {
-      initializeEncryption(this.config.encryption);
-    }
-
     // Initialize light components immediately
     this._rateLimitMiddleware = new RateLimitMiddleware(config.rateLimiting);
 
@@ -143,10 +138,6 @@ export class FirefunAuth {
   // Lazy getters for heavy components
   get authController(): AuthController {
     if (!this._authController) {
-      // Initialize encryption if not already done (serverless mode)
-      if (this.serverless) {
-        initializeEncryption(this.config.encryption);
-      }
       this._authController = new AuthController({
         ...this.config,
         prisma: this.prisma,
@@ -214,7 +205,7 @@ export class FirefunAuth {
     router.use('/refresh', this.rateLimitMiddleware.authRateLimit);
 
     // Apply 2FA rate limiting to 2FA endpoints
-    router.use('/2fa/*', this.rateLimitMiddleware.twoFALimit);
+    router.use('/2fa', this.rateLimitMiddleware.twoFALimit);
 
     // Auth routes
     router.post('/register', this.authController.registerUser);

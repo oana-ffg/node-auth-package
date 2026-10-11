@@ -332,7 +332,7 @@ describe('CleanupService', () => {
       expect(timeDifference).toBeLessThan(60 * 1000); // Less than 1 minute difference
     });
 
-    it('should handle database errors gracefully in serverless mode', async () => {
+    it('should propagate database errors in serverless mode', async () => {
       // Arrange
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       const mockError = new Error('Database timeout');
@@ -341,11 +341,7 @@ describe('CleanupService', () => {
       mockPrisma.challenge.deleteMany = jest.fn().mockRejectedValue(mockError);
 
       // Act
-      const result = await cleanupService.performAllCleanups();
-
-      // Assert
-      expect(result.refreshTokensDeleted).toBe(0);
-      expect(result.challengesDeleted).toBe(0);
+      await expect(cleanupService.performAllCleanups()).rejects.toThrow('Database timeout');
       expect(consoleErrorSpy).toHaveBeenCalledWith('❌ Error during lightweight cleanup:', mockError);
 
       consoleErrorSpy.mockRestore();

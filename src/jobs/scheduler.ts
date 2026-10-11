@@ -9,6 +9,7 @@ export interface SchedulerConfig {
 export class JobScheduler {
   private cleanupService: CleanupService;
   private config: SchedulerConfig;
+  private cleanupTask?: cron.ScheduledTask;
   private isCleanupJobRunning = false;
 
   constructor(cleanupService: CleanupService, config: SchedulerConfig) {
@@ -17,9 +18,13 @@ export class JobScheduler {
   }
 
   public startScheduledJobs(): void {
+    if (this.cleanupTask) {
+      this.cleanupTask.start();
+      return;
+    }
     console.log('🕒 Starting scheduled jobs...');
 
-    cron.schedule(this.config.schedule, async () => {
+    this.cleanupTask = cron.schedule(this.config.schedule, async () => {
       if (this.isCleanupJobRunning) {
         console.log('⏳ Cleanup job already running, skipping this execution');
         return;
@@ -50,7 +55,7 @@ export class JobScheduler {
   }
 
   public stopScheduledJobs(): void {
-    cron.getTasks().forEach(task => task.stop());
-    console.log('🛑 All scheduled jobs stopped');
+    this.cleanupTask?.stop();
+    console.log('🛑 Cleanup job stopped');
   }
 }

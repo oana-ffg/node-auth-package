@@ -418,8 +418,9 @@ describe('AuthMiddleware', () => {
 
         // Assert
         expect(mockJWT.verify).toHaveBeenCalledWith(validToken, validSecret);
-        expect(req.userId).toBeUndefined(); // userId should be undefined
-        expect(next).toHaveBeenCalledWith(); // Should still proceed
+        expect(req.userId).toBeUndefined();
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(next).not.toHaveBeenCalled();
       });
 
       it('should handle token with null userId in payload', () => {
@@ -436,8 +437,9 @@ describe('AuthMiddleware', () => {
         authMiddleware.verifyToken(req, res, next);
 
         // Assert
-        expect(req.userId).toBeNull();
-        expect(next).toHaveBeenCalledWith();
+        expect(req.userId).toBeUndefined();
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(next).not.toHaveBeenCalled();
       });
 
       it('should handle token with empty string userId', () => {
@@ -454,8 +456,9 @@ describe('AuthMiddleware', () => {
         authMiddleware.verifyToken(req, res, next);
 
         // Assert
-        expect(req.userId).toBe('');
-        expect(next).toHaveBeenCalledWith();
+        expect(req.userId).toBeUndefined();
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(next).not.toHaveBeenCalled();
       });
     });
 

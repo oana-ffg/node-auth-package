@@ -153,6 +153,8 @@ export function createMockResponse(overrides: Partial<MockResponse> = {}): MockR
       return headers[name.toLowerCase()];
     }),
 
+    removeListener: jest.fn().mockReturnThis(),
+
     on: jest.fn().mockImplementation((event: string, callback: (...args: any[]) => void) => {
       return mockResponse;
     }),

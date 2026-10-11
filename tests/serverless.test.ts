@@ -26,7 +26,6 @@ import {
 import { MockPrismaClient } from './mocks/prisma.mock';
 import { testConfig } from './setup';
 import { MockRequest, MockResponse, createMockRequest, createMockResponse } from './mocks/express.mock';
-import { EncryptionUtil, initializeEncryption } from '../src/utils/encryption';
 import { Request, Response } from 'express';
 
 // Mock external dependencies
@@ -209,66 +208,19 @@ describe('Serverless Mode', () => {
       expect(() => (ensureJSONBody as any)(mockRequest)).toThrow('Invalid JSON body');
     });
 
-    it('should handle missing body', () => {
+    it('should allow bodyless endpoints and defer required fields to their schemas', () => {
       mockRequest.body = undefined;
-
-      expect(() => (ensureJSONBody as any)(mockRequest)).toThrow('Invalid JSON body');
+      ensureJSONBody(mockRequest as Request);
+      expect(mockRequest.body).toEqual({});
     });
 
-    it('should detect password corruption during parsing', () => {
-      // Simulate a case where JSON parsing corrupts the password
-      const corruptedBody = '{"email":"test@example.com","password":"corrupted"}';
-      mockRequest.body = corruptedBody;
-
-      // Mock the parsing to return different password than in original string
-      const originalParse = JSON.parse;
-      JSON.parse = jest.fn().mockReturnValue({
-        email: 'test@example.com',
-        password: 'different' // Different from what's in the string
-      });
-
-      expect(() => (ensureJSONBody as any)(mockRequest)).toThrow('Invalid JSON body');
-
-      // Restore original JSON.parse
-      JSON.parse = originalParse;
-    });
-  });
-
-  describe('encryption initialization in serverless context', () => {
-    it('should not initialize encryption on construction in serverless mode', () => {
-      // Mock initializeEncryption to track calls
-      const mockInitializeEncryption = jest.fn();
-      jest.doMock('../src/utils/encryption', () => ({
-        ...jest.requireActual('../src/utils/encryption'),
-        initializeEncryption: mockInitializeEncryption,
-      }));
-
-      new FirefunAuth(serverlessConfig);
-
-      expect(mockInitializeEncryption).not.toHaveBeenCalled();
+    it('should preserve JSON escapes in passwords', () => {
+      const data = { password: 'quotes" and backslash\\ and newline\n' };
+      mockRequest.body = JSON.stringify(data);
+      ensureJSONBody(mockRequest as Request);
+      expect(mockRequest.body).toEqual(data);
     });
 
-    it('should initialize encryption when authController is first accessed in serverless mode', () => {
-      const auth = new FirefunAuth(serverlessConfig);
-
-      // Mock the initializeEncryption function
-      const originalInitialize = initializeEncryption;
-      const mockInitialize = jest.fn();
-      (require('../src/utils/encryption') as any).initializeEncryption = mockInitialize;
-
-      // Access authController to trigger lazy loading
-      const controller = auth.authController;
-
-      expect(controller).toBeDefined();
-
-      // Restore original function
-      (require('../src/utils/encryption') as any).initializeEncryption = originalInitialize;
-    });
-
-    it('should initialize encryption immediately in standard mode', () => {
-      // This is tested by ensuring no errors occur during standard mode initialization
-      expect(() => new FirefunAuth(standardConfig)).not.toThrow();
-    });
   });
 
   describe('scheduler disabled in serverless mode', () => {
@@ -476,13 +428,7 @@ describe('Serverless Mode', () => {
       // Mock one of the cleanup operations to fail
       mockPrisma.refreshToken.deleteMany.mockRejectedValue(new Error('Database error'));
 
-      // In serverless mode, errors should be caught and default values returned
-      const result = await performServerlessCleanup(serverlessConfig);
-
-      expect(result).toEqual({
-        refreshTokensDeleted: 0,
-        challengesDeleted: 0
-      });
+      await expect(performServerlessCleanup(serverlessConfig)).rejects.toThrow('Database error');
     });
   });
 

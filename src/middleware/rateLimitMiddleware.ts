@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { RateLimitRequestHandler } from 'express-rate-limit';
 
 export interface RateLimitConfig {
   windowMs: number;
@@ -13,72 +13,43 @@ export interface RateLimitMiddlewareConfig {
 }
 
 export class RateLimitMiddleware {
+  private generalLimiter?: RateLimitRequestHandler;
+  private authLimiter?: RateLimitRequestHandler;
+  private twoFALimiter?: RateLimitRequestHandler;
   private config: RateLimitMiddlewareConfig;
 
   constructor(config: RateLimitMiddlewareConfig) {
     this.config = config;
   }
 
-  /**
-   * General rate limiter for all API endpoints
-   * Applies a moderate rate limit to prevent general API abuse
-   */
+  private createLimiter(config: RateLimitConfig, skipSuccessfulRequests: boolean = false): RateLimitRequestHandler {
+    return rateLimit({
+      windowMs: config.windowMs,
+      max: config.maxRequests,
+      message: {
+        error: config.message,
+        retryAfter: Math.ceil(config.windowMs / 1000),
+      },
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      skipSuccessfulRequests,
+      skipFailedRequests: false,
+    });
+  }
+
   public get generalRateLimit() {
-    return rateLimit({
-      windowMs: this.config.general.windowMs,
-      max: this.config.general.maxRequests,
-      message: {
-        error: this.config.general.message,
-        retryAfter: Math.ceil(this.config.general.windowMs / 1000),
-      },
-      standardHeaders: 'draft-7', // Return rate limit info in the `RateLimit-*` headers
-      legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-      // Skip successful requests when counting towards the limit
-      skipSuccessfulRequests: false,
-      // Skip failed requests when counting towards the limit
-      skipFailedRequests: false,
-    });
+    return this.generalLimiter ??= this.createLimiter(this.config.general);
   }
 
-  /**
-   * Strict rate limiter for authentication endpoints (login, register)
-   * Prevents brute force attacks on authentication
-   */
+  // Count failed authentication attempts without penalizing successful logins.
   public get authRateLimit() {
-    return rateLimit({
-      windowMs: this.config.auth.windowMs,
-      max: this.config.auth.maxRequests,
-      message: {
-        error: this.config.auth.message,
-        retryAfter: Math.ceil(this.config.auth.windowMs / 1000),
-      },
-      standardHeaders: 'draft-7',
-      legacyHeaders: false,
-      // Only count failed requests for auth endpoints to prevent lockout on successful logins
-      skipSuccessfulRequests: true,
-      skipFailedRequests: false,
-    });
+    return this.authLimiter ??= this.createLimiter(this.config.auth, true);
   }
 
-  /**
-   * Very strict rate limiter for 2FA operations
-   * Prevents abuse of two-factor authentication endpoints
-   */
   public get twoFALimit() {
-    return rateLimit({
-      windowMs: this.config.twoFA.windowMs,
-      max: this.config.twoFA.maxRequests,
-      message: {
-        error: this.config.twoFA.message,
-        retryAfter: Math.ceil(this.config.twoFA.windowMs / 1000),
-      },
-      standardHeaders: 'draft-7',
-      legacyHeaders: false,
-      // Count all requests for 2FA operations as they are sensitive
-      skipSuccessfulRequests: false,
-      skipFailedRequests: false,
-    });
+    return this.twoFALimiter ??= this.createLimiter(this.config.twoFA);
   }
+
 }
 
 // Create factory functions for backward compatibility

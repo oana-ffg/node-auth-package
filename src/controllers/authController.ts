@@ -1,3 +1,4 @@
+import { parseDuration } from '../utils/duration';
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
@@ -5,27 +6,8 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 
-// Lazy imports for serverless optimization
-let speakeasy: any = null;
-let qrcode: any = null;
-
-async function getSpeakeasy() {
-  if (!speakeasy) {
-    speakeasy = await import('speakeasy');
-  }
-  return speakeasy;
-}
-
-async function getQRCode() {
-  if (!qrcode) {
-    qrcode = await import('qrcode');
-  }
-  return qrcode;
-}
-
-// Fallback synchronous imports for backwards compatibility
-import speakeasySync from 'speakeasy';
-import qrcodeSync from 'qrcode';
+import speakeasy from 'speakeasy';
+import qrcode from 'qrcode';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import {
   registerSchema,
@@ -39,8 +21,7 @@ import {
   deleteAccountSchema
 } from '../schemas/authSchemas';
 import {
-  encrypt2FASecret,
-  decrypt2FASecret,
+  EncryptionUtil,
   serializeEncryptedData,
   deserializeEncryptedData
 } from '../utils/encryption';
@@ -54,10 +35,12 @@ export interface AuthControllerConfig extends AuthConfig {
 export class AuthController {
   private prisma: PrismaClient;
   private config: AuthConfig;
+  private encryption: EncryptionUtil;
 
   constructor(config: AuthControllerConfig) {
     this.prisma = config.prisma;
     this.config = config;
+    this.encryption = new EncryptionUtil(config.encryption);
   }
 
   /**
@@ -67,28 +50,9 @@ export class AuthController {
   public registerUser = async (req: Request, res: Response) => {
     const parse = registerSchema.safeParse(req.body);
     if (!parse.success) {
-      // Enhanced logging for password validation failures
-      const passwordErrors = parse.error.issues.filter(issue =>
-        issue.path.includes('password')
-      );
-      if (passwordErrors.length > 0) {
-        console.log('Password validation failed:', {
-          errors: passwordErrors.map(e => e.message),
-          passwordLength: req.body?.password?.length || 0,
-          hasExclamation: req.body?.password?.includes('!') || false,
-          specialChars: req.body?.password ? req.body.password.match(/[^A-Za-z0-9]/g) : null
-        });
-      }
       return res.status(400).json({ error: z.flattenError(parse.error) });
     }
     const { email, password } = parse.data;
-
-    // Debug logging for successful password parsing
-    console.log('Password successfully parsed:', {
-      length: password.length,
-      hasExclamation: password.includes('!'),
-      specialChars: password.match(/[^A-Za-z0-9]/g)
-    });
 
     try {
       // Check if a user with the given email already exists in the database
@@ -131,28 +95,9 @@ export class AuthController {
   public loginUser = async (req: Request, res: Response) => {
     const parse = loginSchema.safeParse(req.body);
     if (!parse.success) {
-      // Enhanced logging for login validation failures
-      const passwordErrors = parse.error.issues.filter(issue =>
-        issue.path.includes('password')
-      );
-      if (passwordErrors.length > 0) {
-        console.log('Login password validation failed:', {
-          errors: passwordErrors.map(e => e.message),
-          passwordLength: req.body?.password?.length || 0,
-          hasExclamation: req.body?.password?.includes('!') || false
-        });
-      }
       return res.status(400).json({ error: z.flattenError(parse.error) });
     }
     const { email, password } = parse.data;
-
-    // Debug logging for successful login password parsing
-    console.log('Login password successfully parsed:', {
-      email,
-      passwordLength: password.length,
-      hasExclamation: password.includes('!'),
-      specialChars: password.match(/[^A-Za-z0-9]/g)
-    });
 
     try {
       // Find the user in the database by email
@@ -247,7 +192,7 @@ export class AuthController {
       let decryptedSecret: string;
       try {
         const encryptedData = deserializeEncryptedData(user.twoFactorSecret);
-        decryptedSecret = decrypt2FASecret(encryptedData, user.encryptionVersion);
+        decryptedSecret = this.encryption.decrypt2FASecret(encryptedData, user.encryptionVersion);
       } catch (error) {
         return ErrorHandler.handleError(
           new AppError('Authentication system error', 500, true, {
@@ -260,8 +205,7 @@ export class AuthController {
       }
 
       // Verify the OTP code
-      const speakeasyLib = speakeasy || speakeasySync;
-      const verified = speakeasyLib.totp.verify({
+      const verified = speakeasy.totp.verify({
         secret: decryptedSecret,
         encoding: 'base32',
         token: otp,
@@ -293,7 +237,7 @@ export class AuthController {
     // Generate and store refresh token in DB with configured expiration
     const refreshToken = crypto.randomUUID();
     const refreshTokenExpiry = new Date();
-    refreshTokenExpiry.setTime(refreshTokenExpiry.getTime() + this.parseDuration(this.config.jwt.refreshExpiresIn));
+    refreshTokenExpiry.setTime(refreshTokenExpiry.getTime() + parseDuration(this.config.jwt.refreshExpiresIn));
 
     await this.prisma.refreshToken.create({
       data: {
@@ -345,7 +289,7 @@ export class AuthController {
       // Rotate the refresh token
       const newRefreshToken = crypto.randomUUID();
       const newExpiry = new Date();
-      newExpiry.setTime(newExpiry.getTime() + this.parseDuration(this.config.jwt.refreshExpiresIn));
+      newExpiry.setTime(newExpiry.getTime() + parseDuration(this.config.jwt.refreshExpiresIn));
 
       await this.prisma.$transaction([
         this.prisma.refreshToken.delete({ where: { token: refreshToken } }),
@@ -410,14 +354,11 @@ export class AuthController {
       try {
         // Decrypt the existing secret
         const encryptedData = deserializeEncryptedData(user.twoFactorSecret);
-        const decryptedSecret = decrypt2FASecret(encryptedData, user.encryptionVersion, this.config.encryption);
-
-        const speakeasyLib = speakeasy || speakeasySync;
-        const qrcodeLib = qrcode || qrcodeSync;
+        const decryptedSecret = this.encryption.decrypt2FASecret(encryptedData, user.encryptionVersion);
 
         const secret = {
           base32: decryptedSecret,
-          otpauth_url: speakeasyLib.otpauthURL({
+          otpauth_url: speakeasy.otpauthURL({
             secret: decryptedSecret,
             label: user.email,
             issuer: this.config.appName,
@@ -427,7 +368,7 @@ export class AuthController {
           })
         };
 
-        const qr = await qrcodeLib.toDataURL(secret.otpauth_url);
+        const qr = await qrcode.toDataURL(secret.otpauth_url);
 
         return res.json({
           otpauthUrl: secret.otpauth_url,
@@ -447,16 +388,13 @@ export class AuthController {
     }
 
     // Generate new secret only if 2FA is not enabled
-    const speakeasyLib = speakeasy || speakeasySync;
-    const qrcodeLib = qrcode || qrcodeSync;
-
-    const secret = speakeasyLib.generateSecret({
+    const secret = speakeasy.generateSecret({
       name: `${this.config.appName} (${user.email})`,
     });
 
     try {
       // Encrypt the secret with current version
-      const { encryptedData, version } = encrypt2FASecret(secret.base32);
+      const { encryptedData, version } = this.encryption.encrypt2FASecret(secret.base32);
       const serializedData = serializeEncryptedData(encryptedData);
 
       await this.prisma.user.update({
@@ -468,7 +406,7 @@ export class AuthController {
       });
 
       const otpauthUrl = secret.otpauth_url!;
-      const qr = await qrcodeLib.toDataURL(otpauthUrl);
+      const qr = await qrcode.toDataURL(otpauthUrl);
 
       return res.json({ otpauthUrl, qrCodeDataURL: qr });
     } catch (error) {
@@ -514,7 +452,7 @@ export class AuthController {
       let decryptedSecret: string;
       try {
         const encryptedData = deserializeEncryptedData(user.twoFactorSecret);
-        decryptedSecret = decrypt2FASecret(encryptedData, user.encryptionVersion);
+        decryptedSecret = this.encryption.decrypt2FASecret(encryptedData, user.encryptionVersion);
       } catch (error) {
         return ErrorHandler.handleError(
           new AppError('Authentication system error', 500, true, {
@@ -527,8 +465,7 @@ export class AuthController {
       }
 
       // Verify the OTP code using speakeasy
-      const speakeasyLib = speakeasy || speakeasySync;
-      const verified = speakeasyLib.totp.verify({
+      const verified = speakeasy.totp.verify({
         secret: decryptedSecret,
         encoding: 'base32',
         token: otp,
@@ -584,16 +521,14 @@ export class AuthController {
       }
 
       // Generate new secret
-      const speakeasyLib = speakeasy || speakeasySync;
-      const qrcodeLib = qrcode || qrcodeSync;
 
-      const secret = speakeasyLib.generateSecret({
+      const secret = speakeasy.generateSecret({
         name: `${this.config.appName} (${user.email})`,
       });
 
       try {
         // Encrypt the new secret with current version
-        const { encryptedData, version } = encrypt2FASecret(secret.base32);
+        const { encryptedData, version } = this.encryption.encrypt2FASecret(secret.base32);
         const serializedData = serializeEncryptedData(encryptedData);
 
         // Update user with new secret and disable 2FA until confirmed
@@ -607,7 +542,7 @@ export class AuthController {
         });
 
         const otpauthUrl = secret.otpauth_url!;
-        const qr = await qrcodeLib.toDataURL(otpauthUrl);
+        const qr = await qrcode.toDataURL(otpauthUrl);
 
         return res.status(200).json({
           message: '2FA reset successfully. Please scan the new QR code and confirm setup.',
@@ -735,23 +670,4 @@ export class AuthController {
       return ErrorHandler.handleError(err, res, 'account deletion');
     }
   };
-
-  /**
-   * Helper function to parse duration strings into milliseconds
-   */
-  private parseDuration(duration: string): number {
-    const match = duration.match(/^(\d+)([smhd])$/);
-    if (!match) throw new Error(`Invalid duration format: ${duration}`);
-
-    const value = parseInt(match[1]);
-    const unit = match[2];
-
-    switch (unit) {
-      case 's': return value * 1000;
-      case 'm': return value * 60 * 1000;
-      case 'h': return value * 60 * 60 * 1000;
-      case 'd': return value * 24 * 60 * 60 * 1000;
-      default: throw new Error(`Invalid duration unit: ${unit}`);
-    }
-  }
 }

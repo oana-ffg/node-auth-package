@@ -154,7 +154,7 @@ describe('RateLimitMiddleware', () => {
       const rateLimiter2 = rateLimitMiddleware.generalRateLimit;
 
       // Assert
-      expect(mockRateLimit).toHaveBeenCalledTimes(2);
+      expect(mockRateLimit).toHaveBeenCalledTimes(1);
       expect(rateLimiter1).toBe(mockRateLimiterFunction);
       expect(rateLimiter2).toBe(mockRateLimiterFunction);
     });
@@ -552,8 +552,8 @@ describe('RateLimitMiddleware', () => {
         rateLimitMiddleware.twoFALimit;
       }
 
-      // Assert - Should have created 15 limiters (5 accesses × 3 types)
-      expect(mockRateLimit).toHaveBeenCalledTimes(15);
+      // Repeated access shares each limiter and its counter.
+      expect(mockRateLimit).toHaveBeenCalledTimes(3);
     });
 
     it('should handle concurrent access to rate limiters', () => {

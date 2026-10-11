@@ -30,7 +30,7 @@ A comprehensive authentication solution featuring JWT tokens, 2FA, passkeys (Web
 
 ## 🛠️ Tech Stack
 
-- **Runtime**: Node.js (>=16)
+- **Runtime**: Node.js (>=20)
 - **Framework**: Express.js
 - **Language**: TypeScript
 - **Database**: PostgreSQL with Prisma
@@ -126,17 +126,7 @@ app.use('/api/auth', auth.createAuthRoutes());
 
 **Or use standalone functions for individual endpoints:**
 
-```typescript
-// api/auth/register.js (Vercel function)
-import { registerUserWithRateLimit } from 'firefun-node-auth/serverless';
-
-export default async function handler(req, res) {
-  return registerUserWithRateLimit(req, res, {
-    // your config here
-    serverless: true,
-  });
-}
-```
+Call `registerUserWithRateLimit(req, res, config)` with a configuration object created outside the request handler. Reuse that object across warm invocations so rate-limit counters persist. Treat it as immutable; pass a new object when changing configuration. Counters are local to each warm process, so they do not enforce a shared limit across separate serverless instances.
 
 **Available serverless functions:**
 ```typescript
@@ -237,33 +227,12 @@ The package includes several optimizations for serverless environments:
 
 - **Lazy Initialization**: Heavy components only load when needed
 - **Reduced Memory Footprint**: Minimal upfront initialization
-- **Faster Cold Starts**: < 100ms initialization in serverless mode
-- **Optimized Dependencies**: Dynamic imports for heavy libraries
+- **Instance Isolation**: Each auth controller keeps its own encryption configuration
 - **Background Tasks Disabled**: No scheduler in serverless mode
-
-### Performance Comparison
-
-| Mode | Cold Start Time | Memory Usage | Initialization |
-|------|----------------|--------------|----------------|
-| Traditional | ~500ms | High | All upfront |
-| Serverless | < 100ms | Low | Lazy loaded |
 
 ### Vercel Deployment Example
 
-```typescript
-// api/auth/[...auth].ts
-import { FirefunAuth } from 'firefun-node-auth';
-
-const auth = new FirefunAuth({
-  // your config
-  serverless: true,
-});
-
-export default async function handler(req, res) {
-  const authRouter = auth.createAuthRoutes();
-  return authRouter(req, res);
-}
-```
+See the [Vercel setup guide](examples/vercel-setup.md) for handlers that share configuration and preserve rate-limit counters across warm requests.
 
 ## 🔧 Advanced Usage
 
@@ -335,7 +304,7 @@ firefun-node-auth/
 
 ## 📋 Requirements
 
-- **Node.js**: >= 16.0.0
+- **Node.js**: >= 20.0.0
 - **Database**: PostgreSQL (via Prisma)
 - **Express**: >= 5.0.0
 

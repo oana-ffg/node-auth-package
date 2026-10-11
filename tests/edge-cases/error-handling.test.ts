@@ -229,10 +229,9 @@ describe('Error Handling - Malformed Requests', () => {
         password: false
       };
 
-      // Act - This will cause a TypeError in the debug logging due to type confusion
-      await expect(
-        authController.registerUser(req as Request, res as Response)
-      ).rejects.toThrow(TypeError);
+      // Invalid input must produce a validation response instead of throwing.
+      await authController.registerUser(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(400);
     });
 
     it('should handle number values where strings expected', async () => {
@@ -242,10 +241,9 @@ describe('Error Handling - Malformed Requests', () => {
         password: 67890
       };
 
-      // Act - This will cause a TypeError in the debug logging due to type confusion
-      await expect(
-        authController.registerUser(req as Request, res as Response)
-      ).rejects.toThrow(TypeError);
+      // Invalid input must produce a validation response instead of throwing.
+      await authController.registerUser(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(400);
     });
 
     it('should handle object values where strings expected', async () => {
@@ -255,10 +253,9 @@ describe('Error Handling - Malformed Requests', () => {
         password: { another: 'object' }
       };
 
-      // Act - This will cause a TypeError in the debug logging due to type confusion
-      await expect(
-        authController.registerUser(req as Request, res as Response)
-      ).rejects.toThrow(TypeError);
+      // Invalid input must produce a validation response instead of throwing.
+      await authController.registerUser(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(400);
     });
 
     it('should handle function values where strings expected', async () => {
@@ -268,10 +265,9 @@ describe('Error Handling - Malformed Requests', () => {
         password: function() { return 'another function'; }
       };
 
-      // Act - This will cause a TypeError in the debug logging due to type confusion
-      await expect(
-        authController.registerUser(req as Request, res as Response)
-      ).rejects.toThrow(TypeError);
+      // Invalid input must produce a validation response instead of throwing.
+      await authController.registerUser(req as Request, res as Response);
+      expect(res.status).toHaveBeenCalledWith(400);
     });
   });
 
@@ -600,10 +596,10 @@ describe('Error Handling - Invalid Configuration', () => {
         prisma: mockPrisma as any
       };
 
-      // Act & Assert - Constructor doesn't validate, but runtime operations might fail
+      // Reject invalid encryption configuration before handling requests.
       expect(() => {
         new AuthController(invalidConfig);
-      }).not.toThrow(); // Constructor is permissive
+      }).toThrow('Encryption key v1 must be at least 32 characters long');
     });
 
     it('should handle undefined configuration object', () => {
@@ -646,10 +642,10 @@ describe('Error Handling - Invalid Configuration', () => {
         prisma: mockPrisma as any
       };
 
-      // Act & Assert - Constructor is permissive
+      // Reject invalid encryption configuration before handling requests.
       expect(() => {
         new AuthController(invalidConfig);
-      }).not.toThrow();
+      }).toThrow('Encryption key v1 must be at least 32 characters long');
     });
 
     it('should handle configuration with malicious values', () => {

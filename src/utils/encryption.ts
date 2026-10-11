@@ -194,20 +194,3 @@ export function deserializeEncryptedData(serializedData: string): EncryptedData 
     throw new Error(`Failed to deserialize encrypted data: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
-
-// Backwards compatibility functions that use global config
-export let encrypt2FASecret: (secret: string) => { encryptedData: EncryptedData; version: string };
-export let decrypt2FASecret: (encryptedData: EncryptedData, version: string, config?: EncryptionConfig) => string;
-
-export function initializeEncryption(config: EncryptionConfig): void {
-  const encryptionUtil = new EncryptionUtil(config);
-
-  encrypt2FASecret = (secret: string) => encryptionUtil.encrypt2FASecret(secret);
-  decrypt2FASecret = (encryptedData: EncryptedData, version: string, overrideConfig?: EncryptionConfig) => {
-    if (overrideConfig) {
-      const tempUtil = new EncryptionUtil(overrideConfig);
-      return tempUtil.decrypt2FASecret(encryptedData, version);
-    }
-    return encryptionUtil.decrypt2FASecret(encryptedData, version);
-  };
-}

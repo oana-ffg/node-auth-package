@@ -126,21 +126,15 @@ export class EncryptionMock {
     return this.config.deserializeResult;
   });
 
-  // Mock the initializeEncryption function
-  initializeEncryption = jest.fn().mockImplementation((config: any) => {
-    // Mock implementation - doesn't need to do anything
-  });
+
 }
 
 // Create the default mock instance
 const encryptionMock = EncryptionMock.getInstance();
 
 // Export individual functions to match encryption module's export pattern
-export const encrypt2FASecret = encryptionMock.encrypt2FASecret;
-export const decrypt2FASecret = encryptionMock.decrypt2FASecret;
 export const serializeEncryptedData = encryptionMock.serializeEncryptedData;
 export const deserializeEncryptedData = encryptionMock.deserializeEncryptedData;
-export const initializeEncryption = encryptionMock.initializeEncryption;
 
 // Export default
 export default encryptionMock;
@@ -184,3 +178,10 @@ export const encryptionTestScenarios = {
     deserializeError: new Error('Deserialization failed')
   }
 };
+// Controllers own their encryption configuration; expose the same test double
+// through the class interface used in production.
+export class EncryptionUtil {
+  encrypt2FASecret = encryptionMock.encrypt2FASecret;
+  decrypt2FASecret = encryptionMock.decrypt2FASecret;
+  constructor(_config: unknown) {}
+}

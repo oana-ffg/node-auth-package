@@ -1,105 +1,90 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, RequestHandler } from 'express';
 import { FirefunAuth, FirefunAuthConfig } from './index';
 import { ErrorHandler, AppError } from './utils/errorHandler';
+
+// Reuse the same configuration object across warm invocations. The weak cache
+// preserves limiter counters without keeping unused configurations alive.
+type EndpointHandler = (req: Request, res: Response) => Promise<unknown>;
+
+const instances = new WeakMap<FirefunAuthConfig, FirefunAuth>();
+function getAuth(config: FirefunAuthConfig): FirefunAuth {
+  let auth = instances.get(config);
+  if (!auth) {
+    auth = new FirefunAuth({ ...config, serverless: true });
+    instances.set(config, auth);
+  }
+  return auth;
+}
+
+// Middleware can complete a response without calling next (401/429). In that
+// case the endpoint must settle without running its controller.
+function runMiddleware(middleware: RequestHandler, req: Request, res: Response): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const finish = (allowed: boolean, error?: unknown) => {
+      res.removeListener('finish', ended);
+      res.removeListener('close', ended);
+      if (error) reject(error);
+      else resolve(allowed);
+    };
+    const ended = () => finish(false);
+    res.on('finish', ended);
+    res.on('close', ended);
+    try {
+      Promise.resolve(middleware(req, res, error => finish(!error, error)))
+        .catch(error => finish(false, error));
+    } catch (error) {
+      finish(false, error);
+    }
+  });
+}
 
 /**
  * Vercel-compatible body handler for serverless environments
  * Handles different body formats that may be encountered in serverless runtimes
  */
 function ensureJSONBody(req: Request): void {
-  let parsedBody;
+  if (req.body === undefined || req.body === null) {
+    req.body = {};
+    return;
+  }
   try {
-    // Handle different body formats for serverless environments
-    if (req.body && typeof req.body === 'object') {
-      // Body is already parsed - validate it's not corrupted
-      parsedBody = req.body;
-
-      // Validate that special characters in password fields are preserved
-      if (parsedBody.password && typeof parsedBody.password === 'string') {
-        const originalLength = parsedBody.password.length;
-        // Check if password looks suspicious (common issues: truncation, encoding problems)
-        if (originalLength === 0) {
-          throw new Error('Password field appears to be empty after parsing');
-        }
-      }
-    } else if (typeof req.body === 'string') {
-      // Parse string body - this is where special character issues often occur
-      const bodyString = req.body;
-
-      // Validate the string looks like valid JSON
-      if (!bodyString.trim().startsWith('{') && !bodyString.trim().startsWith('[')) {
-        throw new Error('Body string does not appear to be valid JSON');
-      }
-
-      // Parse with detailed error handling
-      try {
-        parsedBody = JSON.parse(bodyString);
-      } catch (parseError) {
-        // Enhanced error for JSON parsing issues - often where special chars get lost
-        throw new Error(`JSON parsing failed. This may be due to special characters in the request. Original error: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
-      }
-
-      // Validate that special characters in password fields survived parsing
-      if (parsedBody.password && typeof parsedBody.password === 'string') {
-        const originalPasswordInString = bodyString.match(/"password"\s*:\s*"([^"]*?)"/)?.[1];
-        if (originalPasswordInString && originalPasswordInString !== parsedBody.password) {
-          throw new Error(`Password field was corrupted during JSON parsing. Original contained special characters that may have been lost.`);
-        }
-      }
-    } else {
-      throw new Error('No body found');
+    const body = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : req.body;
+    const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new Error('Expected a JSON object');
     }
-
-    // Success - update req.body to ensure it's the parsed object
-    req.body = parsedBody;
-
-  } catch (error) {
+    req.body = parsed;
+  } catch {
+    // Never include body contents or parser errors: they can contain passwords.
     throw new AppError('Invalid JSON body', 400, true, {
-      reason: 'Failed to parse request body',
-      help: 'Ensure Content-Type: application/json header is set and body contains valid JSON. If using special characters in passwords, ensure they are properly escaped.',
-      details: `Body type: ${typeof req.body}, Body preview: ${typeof req.body === 'string' ? req.body.substring(0, 100) + '...' : 'object'}, Error: ${error instanceof Error ? error.message : String(error)}`
+      reason: 'Request body must be a JSON object',
+      help: 'Send a JSON object with Content-Type: application/json.'
     });
   }
 }
 
-/**
- * Creates a serverless-optimized function handler
- * @param handlerName - The method name on AuthController to call
- * @returns Function that can be used as a serverless endpoint
- */
-function createServerlessAuthFunction(handlerName: keyof FirefunAuth['authController']) {
+function createServerlessFunction(
+  controllerName: 'authController' | 'passkeyController',
+  handlerName: string
+) {
   return async (req: Request, res: Response, config: FirefunAuthConfig) => {
     try {
-      // Ensure JSON body is parsed for serverless environments
       ensureJSONBody(req);
-
-      const auth = new FirefunAuth({ ...config, serverless: true });
-      const handler = (auth.authController as any)[handlerName].bind(auth.authController);
+      const controller = getAuth(config)[controllerName];
+      const handler = (controller as unknown as Record<string, EndpointHandler>)[handlerName].bind(controller);
       return await handler(req, res);
     } catch (error) {
-      return ErrorHandler.handleError(error, res, `serverless auth function - ${handlerName}`);
+      return ErrorHandler.handleError(error, res, `serverless ${controllerName} - ${handlerName}`);
     }
   };
 }
 
-/**
- * Creates a serverless-optimized passkey function handler
- * @param handlerName - The method name on PasskeyController to call
- * @returns Function that can be used as a serverless endpoint
- */
-function createServerlessPasskeyFunction(handlerName: keyof FirefunAuth['passkeyController']) {
-  return async (req: Request, res: Response, config: FirefunAuthConfig) => {
-    try {
-      // Ensure JSON body is parsed for serverless environments
-      ensureJSONBody(req);
+function createServerlessAuthFunction(handlerName: keyof FirefunAuth['authController']) {
+  return createServerlessFunction('authController', handlerName);
+}
 
-      const auth = new FirefunAuth({ ...config, serverless: true });
-      const handler = (auth.passkeyController as any)[handlerName].bind(auth.passkeyController);
-      return await handler(req, res);
-    } catch (error) {
-      return ErrorHandler.handleError(error, res, `serverless passkey function - ${handlerName}`);
-    }
-  };
+function createServerlessPasskeyFunction(handlerName: keyof FirefunAuth['passkeyController']) {
+  return createServerlessFunction('passkeyController', handlerName);
 }
 
 // Auth function exports
@@ -128,10 +113,7 @@ export const renamePasskey = createServerlessPasskeyFunction('renamePasskey');
  * @returns Middleware function
  */
 export function createServerlessAuthMiddleware(config: FirefunAuthConfig) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const auth = new FirefunAuth({ ...config, serverless: true });
-    return auth.getAuthMiddleware()(req, res, next);
-  };
+  return getAuth(config).getAuthMiddleware();
 }
 
 /**
@@ -140,7 +122,7 @@ export function createServerlessAuthMiddleware(config: FirefunAuthConfig) {
  * @returns Rate limiting middleware object
  */
 export function createServerlessRateLimitMiddleware(config: FirefunAuthConfig) {
-  const auth = new FirefunAuth({ ...config, serverless: true });
+  const auth = getAuth(config);
   return auth.getRateLimitMiddleware();
 }
 
@@ -150,7 +132,7 @@ export function createServerlessRateLimitMiddleware(config: FirefunAuthConfig) {
  * @returns Cleanup results
  */
 export async function performServerlessCleanup(config: FirefunAuthConfig) {
-  const auth = new FirefunAuth({ ...config, serverless: true });
+  const auth = getAuth(config);
   return auth.performCleanup();
 }
 
@@ -167,9 +149,8 @@ export function createServerlessHandler(
   rateLimitType?: 'general' | 'auth' | 'twoFA'
 ) {
   return async (req: Request, res: Response, config: FirefunAuthConfig) => {
-    const auth = new FirefunAuth({ ...config, serverless: true });
-
     try {
+      const auth = getAuth(config);
       // Ensure JSON body is parsed for serverless environments
       ensureJSONBody(req);
 
@@ -178,29 +159,16 @@ export function createServerlessHandler(
         const rateLimits = auth.getRateLimitMiddleware();
         const rateLimitMiddleware = rateLimits[rateLimitType];
 
-        // Apply rate limiting
-        await new Promise<void>((resolve, reject) => {
-          rateLimitMiddleware(req, res, (err?: any) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
+        if (!await runMiddleware(rateLimitMiddleware, req, res)) return;
       }
 
       // Apply auth middleware if required
-      if (requiresAuth) {
-        await new Promise<void>((resolve, reject) => {
-          auth.getAuthMiddleware()(req, res, (err?: any) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
-      }
+      if (requiresAuth && !await runMiddleware(auth.getAuthMiddleware(), req, res)) return;
 
       // Execute the handler
       const isPasskeyHandler = handlerName.includes('Passkey') || handlerName.includes('passkey');
       const controller = isPasskeyHandler ? auth.passkeyController : auth.authController;
-      const handler = (controller as any)[handlerName].bind(controller);
+      const handler = (controller as unknown as Record<string, EndpointHandler>)[handlerName].bind(controller);
 
       return await handler(req, res);
     } catch (error) {

@@ -302,13 +302,7 @@ describe('Serverless Integration', () => {
     it('should handle cleanup failures gracefully', async () => {
       mockPrisma.refreshToken.deleteMany.mockRejectedValue(new Error('Database connection failed'));
 
-      const result = await performServerlessCleanup(serverlessConfig);
-
-      // In serverless mode, errors should be caught and default values returned
-      expect(result).toEqual({
-        refreshTokensDeleted: 0,
-        challengesDeleted: 0,
-      });
+      await expect(performServerlessCleanup(serverlessConfig)).rejects.toThrow('Database connection failed');
     });
   });
 
@@ -350,7 +344,7 @@ describe('Serverless Integration', () => {
       const mockResponse = createMockResponse();
 
       // Set invalid body that will cause JSON parsing to fail
-      mockRequest.body = undefined;
+      mockRequest.body = '{invalid json';
 
       await registerUser(mockRequest as Request, mockResponse as Response, serverlessConfig);
 
@@ -359,9 +353,8 @@ describe('Serverless Integration', () => {
         expect.objectContaining({
           error: expect.stringContaining('Invalid JSON body'),
           details: expect.objectContaining({
-            reason: 'Failed to parse request body',
+            reason: 'Request body must be a JSON object',
             help: expect.any(String),
-            details: expect.any(String),
           }),
         })
       );

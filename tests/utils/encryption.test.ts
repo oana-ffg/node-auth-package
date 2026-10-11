@@ -7,10 +7,7 @@ import {
   EncryptionUtil,
   EncryptionConfig,
   serializeEncryptedData,
-  deserializeEncryptedData,
-  initializeEncryption,
-  encrypt2FASecret,
-  decrypt2FASecret
+  deserializeEncryptedData
 } from '../../src/utils/encryption';
 
 describe('EncryptionUtil', () => {
@@ -431,76 +428,6 @@ describe('Serialization and Deserialization', () => {
       const deserialized = deserializeEncryptedData(serialized);
 
       expect(deserialized).toEqual(original);
-    });
-  });
-});
-
-describe('Global encryption functions', () => {
-  let testConfig: EncryptionConfig;
-
-  beforeEach(() => {
-    testConfig = {
-      algorithm: 'aes-256-gcm',
-      keyLength: 32,
-      ivLength: 16,
-      saltLength: 32,
-      pbkdf2Iterations: 100000,
-      keys: {
-        v1: 'test-encryption-key-v1-32-chars-min',
-        v2: 'test-encryption-key-v2-32-chars-min'
-      },
-      currentVersion: 'v1',
-      serverless: false
-    };
-  });
-
-  describe('initializeEncryption', () => {
-    it('should initialize global encryption functions', () => {
-      initializeEncryption(testConfig);
-
-      expect(typeof encrypt2FASecret).toBe('function');
-      expect(typeof decrypt2FASecret).toBe('function');
-    });
-
-    it('should make global functions work after initialization', () => {
-      initializeEncryption(testConfig);
-
-      const secret = 'JBSWY3DPEHPK3PXP';
-      const encrypted = encrypt2FASecret(secret);
-      const decrypted = decrypt2FASecret(encrypted.encryptedData, encrypted.version);
-
-      expect(decrypted).toBe(secret);
-    });
-
-    it('should use current version from config', () => {
-      const configV2 = { ...testConfig, currentVersion: 'v2' };
-      initializeEncryption(configV2);
-
-      const secret = 'JBSWY3DPEHPK3PXP';
-      const encrypted = encrypt2FASecret(secret);
-
-      expect(encrypted.version).toBe('v2');
-    });
-
-    it('should support override config in decrypt function', () => {
-      initializeEncryption(testConfig);
-
-      const secret = 'JBSWY3DPEHPK3PXP';
-      const encrypted = encrypt2FASecret(secret);
-
-      // Create override config with different key
-      const overrideConfig = {
-        ...testConfig,
-        keys: {
-          v1: 'different-encryption-key-v1-32-min',
-          v2: 'different-encryption-key-v2-32-min'
-        }
-      };
-
-      // Should be able to decrypt with override config
-      // Note: This would fail because the key is different, but that's expected
-      expect(() => decrypt2FASecret(encrypted.encryptedData, encrypted.version, overrideConfig))
-        .toThrow();
     });
   });
 });

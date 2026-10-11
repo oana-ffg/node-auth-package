@@ -1,3 +1,4 @@
+import { parseDuration } from '../utils/duration';
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 
@@ -449,7 +450,7 @@ export class PasskeyController {
       // Generate and store refresh token
       const refreshToken = crypto.randomUUID();
       const refreshTokenExpiry = new Date();
-      refreshTokenExpiry.setTime(refreshTokenExpiry.getTime() + this.parseDuration(this.config.jwt.refreshExpiresIn));
+      refreshTokenExpiry.setTime(refreshTokenExpiry.getTime() + parseDuration(this.config.jwt.refreshExpiresIn));
 
       await this.prisma.refreshToken.create({
         data: {
@@ -604,23 +605,4 @@ export class PasskeyController {
       return ErrorHandler.handleError(err, res, 'rename passkey');
     }
   };
-
-  /**
-   * Helper function to parse duration strings into milliseconds
-   */
-  private parseDuration(duration: string): number {
-    const match = duration.match(/^(\d+)([smhd])$/);
-    if (!match) throw new Error(`Invalid duration format: ${duration}`);
-
-    const value = parseInt(match[1]);
-    const unit = match[2];
-
-    switch (unit) {
-      case 's': return value * 1000;
-      case 'm': return value * 60 * 1000;
-      case 'h': return value * 60 * 60 * 1000;
-      case 'd': return value * 24 * 60 * 60 * 1000;
-      default: throw new Error(`Invalid duration unit: ${unit}`);
-    }
-  }
 }

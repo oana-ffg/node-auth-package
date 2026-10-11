@@ -45,7 +45,20 @@ export class AuthMiddleware {
     const token = authHeader.split(' ')[1];
 
     try {
-      const decoded = jwt.verify(token, this.jwtSecret) as { userId: string };
+      const decoded = jwt.verify(token, this.jwtSecret);
+      // A signature alone does not make a 2FA challenge an access token.
+      if (
+        typeof decoded !== 'object' || decoded === null ||
+        typeof decoded.userId !== 'string' || decoded.userId.trim() === '' ||
+        'temp' in decoded || 'purpose' in decoded
+      ) {
+        ErrorHandler.handleError(
+          new AppError('Invalid access token', 401),
+          res,
+          'auth middleware - token verification'
+        );
+        return;
+      }
       req.userId = decoded.userId;
       next();
     } catch (err) {

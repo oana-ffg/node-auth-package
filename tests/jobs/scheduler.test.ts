@@ -270,50 +270,28 @@ describe('JobScheduler', () => {
       jobScheduler = new JobScheduler(mockCleanupService, mockConfig);
     });
 
-    it('should stop all scheduled jobs', () => {
-      // Arrange
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      const mockTask2 = { stop: jest.fn() };
-      const mockTaskMap = new Map([
-        ['task1', mockTask],
-        ['task2', mockTask2],
-      ]);
-
-      mockCron.getTasks.mockReturnValue(mockTaskMap);
-
-      // Act
+    it('stops only its own cleanup task', () => {
+      const unrelated = { stop: jest.fn() };
+      mockCron.getTasks.mockReturnValue(new Map([['other', unrelated]]) as any);
+      jobScheduler.startScheduledJobs();
       jobScheduler.stopScheduledJobs();
-
-      // Assert
-      expect(mockTask.stop).toHaveBeenCalled();
-      expect(mockTask2.stop).toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalledWith('🛑 All scheduled jobs stopped');
-
-      consoleSpy.mockRestore();
+      expect(mockTask.stop).toHaveBeenCalledTimes(1);
+      expect(unrelated.stop).not.toHaveBeenCalled();
+      expect(mockCron.getTasks).not.toHaveBeenCalled();
     });
 
-    it('should handle empty task list gracefully', () => {
-      // Arrange
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      mockCron.getTasks.mockReturnValue(new Map());
-
-      // Act
+    it('reuses its task when restarted', () => {
+      jobScheduler.startScheduledJobs();
+      jobScheduler.startScheduledJobs();
       jobScheduler.stopScheduledJobs();
-
-      // Assert
-      expect(consoleSpy).toHaveBeenCalledWith('🛑 All scheduled jobs stopped');
-
-      consoleSpy.mockRestore();
+      jobScheduler.startScheduledJobs();
+      expect(mockCron.schedule).toHaveBeenCalledTimes(1);
+      expect(mockTask.start).toHaveBeenCalledTimes(2);
     });
 
-    it('should handle tasks without stop method', () => {
-      // Arrange
-      const invalidTask = {}; // Task without stop method
-      const mockTaskMap = new Map([['invalid', invalidTask]]);
-      mockCron.getTasks.mockReturnValue(mockTaskMap);
-
-      // Act & Assert - This will actually throw since the scheduler doesn't handle it
-      expect(() => jobScheduler.stopScheduledJobs()).toThrow('task.stop is not a function');
+    it('can stop before being started', () => {
+      expect(() => jobScheduler.stopScheduledJobs()).not.toThrow();
+      expect(mockTask.stop).not.toHaveBeenCalled();
     });
   });
 
@@ -446,6 +424,7 @@ describe('JobScheduler', () => {
     });
 
     it('should handle cron library errors gracefully', () => {
+      jobScheduler = new JobScheduler(mockCleanupService, mockConfig);
       // Arrange
       const mockError = new Error('Cron scheduling failed');
       mockCron.schedule.mockImplementation(() => {

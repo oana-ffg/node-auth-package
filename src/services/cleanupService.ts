@@ -95,7 +95,7 @@ export class CleanupService {
       };
     } catch (error) {
       console.error('❌ Error during lightweight cleanup:', error);
-      return { refreshTokensDeleted: 0, challengesDeleted: 0 };
+      throw error;
     }
   };
 }
